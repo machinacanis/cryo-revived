@@ -23,7 +23,8 @@
 //! - **handlers** — any `async fn` whose parameters implement [`FromEvent`];
 //!   declare what you need (`PlainText`, `SenderOpenId`, `C2CMessageCtx`,
 //!   `Inject<YourService>`…) and it is produced from the event at compile time.
-//!   Return `()` or `cryo::Result<()>` — `Ok(())` needs no annotation.
+//!   Return `()` or `cryo::Result<()>` — `Ok(())` needs no annotation and
+//!   `?` converts any `std::error::Error` (`cryo::Error` is anyhow).
 //! - **typed ctxs** — [`C2CMessageCtx`] & friends decode `payload.d` and
 //!   expose `.say()` / `.reply()` / `.active()` bound message builders;
 //!   awaiting a builder sends it (`c.say("hi").await`).
@@ -60,7 +61,7 @@ pub use default::{
     on_group_join, on_group_leave, on_group_member_add, on_group_member_remove, on_group_message,
     on_interaction, on_message_audited, provide, provide_shared, run,
 };
-pub use error::{BoxError, Error, Result};
+pub use error::{Error, FatalClose, NoResume, Result};
 pub use extract::{EventId, FromEvent, GroupOpenId, Inject, MessageId, PlainText, SenderOpenId};
 pub use fleet::Fleet;
 pub use reply::ReplyBuilder;

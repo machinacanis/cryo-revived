@@ -148,16 +148,13 @@ fn builder_returning_handler() {
     bot.on_c2c_message(|c: C2CMessageCtx| c.say("hi"));
 }
 
-/// Application errors join the framework error via `From`, so `?` stays
-/// annotation-free.
+/// Any `std::error::Error` `?`-converts inside a handler — anyhow covers
+/// the conversion, so no `From` impl is ever needed.
 #[tokio::test]
-async fn custom_error_converts_via_from() {
+async fn foreign_error_needs_no_conversion() {
+    #[derive(Debug, thiserror::Error)]
+    #[error("boom")]
     struct Boom;
-    impl From<Boom> for crate::Error {
-        fn from(_: Boom) -> Self {
-            crate::Error::other(std::io::Error::other("boom"))
-        }
-    }
     let bot = Bot::new(Config::new("id", "secret", Intent::BASIC));
     bot.on_c2c_message(|_c: C2CMessageCtx| async move {
         Err::<(), Boom>(Boom)?;

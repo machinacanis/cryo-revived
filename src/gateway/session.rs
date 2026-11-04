@@ -11,8 +11,9 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 use crate::api::Client;
+use crate::error::gateway;
 use crate::model::{event, op, Intent, Payload, User};
-use crate::{Error, Result};
+use crate::{Error, FatalClose, NoResume, Result};
 
 type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type WriteHalf = futures_util::stream::SplitSink<Ws, Message>;
@@ -68,13 +69,13 @@ impl Session {
             match self.serve(&url, &cancel).await {
                 Ok(()) => return Ok(()),
                 Err(_) if cancel.is_cancelled() => return Ok(()),
-                Err(Error::NoResume) => {
+                Err(e) if e.is::<NoResume>() => {
                     warn!("gateway: session invalidated, re-identify");
                     self.state.lock().unwrap().session_id.clear();
                     self.state.lock().unwrap().seq = 0;
                     continue;
                 }
-                Err(e @ Error::FatalClose(..)) => return Err(e),
+                Err(e) if e.is::<FatalClose>() => return Err(e),
                 Err(e) => {
                     warn!("gateway: reconnecting: {e}");
                     tokio::select! {
@@ -88,7 +89,7 @@ impl Session {
 
     /// One connection lifecycle: hello → auth → read loop.
     async fn serve(&self, url: &str, cancel: &CancellationToken) -> Result<()> {
-        let (ws, _) = connect_async(url).await.map_err(Error::from)?;
+        let (ws, _) = connect_async(url).await?;
         let (write, mut read) = ws.split();
         let write = Arc::new(tokio::sync::Mutex::new(write));
 
@@ -96,13 +97,10 @@ impl Session {
         let hello = read
             .next()
             .await
-            .ok_or_else(|| Error::Gateway("closed before hello".into()))??;
+            .ok_or_else(|| gateway("closed before hello"))??;
         let hello = parse(&hello)?;
         if hello.op != op::HELLO {
-            return Err(Error::Gateway(format!(
-                "expect hello(op10), got op={}",
-                hello.op
-            )));
+            return Err(gateway(format!("expect hello(op10), got op={}", hello.op)));
         }
         let interval = hello.d["heartbeat_interval"].as_u64().unwrap_or(45_000);
         let interval = std::time::Duration::from_millis(interval.max(1_000));
@@ -186,7 +184,7 @@ impl Session {
             };
             let msg = match msg {
                 Some(m) => m,
-                None => return Err(Error::Gateway("connection closed".into())),
+                None => return Err(gateway("connection closed")),
             };
             match msg {
                 Ok(Message::Text(text)) => match serde_json::from_str::<Payload>(&text) {
@@ -200,7 +198,7 @@ impl Session {
                     return Err(classify_close(code, &text));
                 }
                 Ok(_) => {}
-                Err(e) => return Err(Error::Ws(Box::new(e))),
+                Err(e) => return Err(e.into()),
             }
         }
     }
@@ -231,14 +229,14 @@ async fn send(write: &Write, p: &Payload) -> Result<()> {
         .lock()
         .await
         .send(Message::Text(serde_json::to_string(p)?.into()))
-        .await
-        .map_err(Error::from)
+        .await?;
+    Ok(())
 }
 
 fn parse(m: &Message) -> Result<Payload> {
     match m {
         Message::Text(t) => Ok(serde_json::from_str(t)?),
-        other => Err(Error::Gateway(format!("expect text frame, got {other:?}"))),
+        other => Err(gateway(format!("expect text frame, got {other:?}"))),
     }
 }
 
@@ -246,11 +244,11 @@ fn parse(m: &Message) -> Result<Payload> {
 fn classify_close(code: u16, text: &str) -> Error {
     match code {
         // session timeout / invalid seq — resume is still possible
-        4008 | 4009 => Error::Gateway(format!("close {code} (resumable): {text}")),
+        4008 | 4009 => gateway(format!("close {code} (resumable): {text}")),
         // must re-identify
-        4006 | 4007 | 4900..=4913 => Error::NoResume,
+        4006 | 4007 | 4900..=4913 => NoResume.into(),
         // banned / offline — do not retry
-        4914 | 4915 => Error::FatalClose(code, text.to_string()),
-        _ => Error::Gateway(format!("close {code}: {text}")),
+        4914 | 4915 => FatalClose(code, text.to_string()).into(),
+        _ => gateway(format!("close {code}: {text}")),
     }
 }

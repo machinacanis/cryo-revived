@@ -134,7 +134,7 @@ macro_rules! typed_ctx {
                         event: ctx.clone(),
                         $field: ctx.decode()?,
                     }),
-                    t => Err(Error::Extract(format!(
+                    t => Err(Error::msg(format!(
                         "event {t} cannot build {}",
                         stringify!($name)
                     ))),

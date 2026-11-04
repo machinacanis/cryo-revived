@@ -208,7 +208,7 @@ impl Fleet {
                 }
                 Err(je) => {
                     if first_err.is_none() {
-                        first_err = Some(Error::Gateway(format!("task: {je}")));
+                        first_err = Some(Error::msg(format!("task: {je}")));
                         cancel.cancel();
                     }
                 }

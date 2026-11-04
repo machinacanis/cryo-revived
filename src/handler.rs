@@ -9,18 +9,16 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::context::EventCtx;
-use crate::error::BoxError;
 use crate::extract::FromEvent;
-use crate::Error;
+use crate::Result;
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Type-erased handler, callable against any event context.
-pub(crate) type Erased =
-    Arc<dyn Fn(&EventCtx) -> BoxFuture<'static, Result<(), BoxError>> + Send + Sync>;
+pub(crate) type Erased = Arc<dyn Fn(&EventCtx) -> BoxFuture<'static, Result<()>> + Send + Sync>;
 
 /// What a handler future may produce: `()` for infallible handlers,
-/// or `cryo::Result<()>` (i.e. `Result<(), Error>`).
+/// or `cryo::Result<()>` (i.e. `anyhow::Result<()>`).
 ///
 /// ```text
 /// |c: Ctx| async move { println!("hi"); }           // output = ()
@@ -28,24 +26,24 @@ pub(crate) type Erased =
 /// |c: Ctx| c.say("hi")                              // builders await themselves
 /// ```
 ///
-/// The error type is fixed to [`crate::Error`] on purpose: a single
+/// The error type is fixed to `cryo::Error` (anyhow) on purpose: a single
 /// `Result` impl lets `Ok(())` be inferred, so closures with `?` need no
-/// `Ok::<(), cryo::Error>(())` annotation. Application errors convert via
-/// `impl From<MyErr> for cryo::Error` (or [`Error::other`]).
+/// `Ok::<(), cryo::Error>(())` annotation. `?` converts any
+/// `std::error::Error` via anyhow — no `From` impl needed.
 pub trait IntoOutcome: Send + 'static {
     /// Normalize into the erased result type.
-    fn into_outcome(self) -> Result<(), BoxError>;
+    fn into_outcome(self) -> Result<()>;
 }
 
 impl IntoOutcome for () {
-    fn into_outcome(self) -> Result<(), BoxError> {
+    fn into_outcome(self) -> Result<()> {
         Ok(())
     }
 }
 
-impl IntoOutcome for Result<(), Error> {
-    fn into_outcome(self) -> Result<(), BoxError> {
-        self.map_err(Into::into)
+impl IntoOutcome for Result<()> {
+    fn into_outcome(self) -> Result<()> {
+        self
     }
 }
 
@@ -53,7 +51,7 @@ impl IntoOutcome for Result<(), Error> {
 /// implement [`FromEvent`] — you never implement this by hand.
 pub trait Handler<Args>: Clone + Send + Sync + 'static {
     /// Extract args from `ctx` and run the handler.
-    fn call(&self, ctx: EventCtx) -> BoxFuture<'static, Result<(), BoxError>>;
+    fn call(&self, ctx: EventCtx) -> BoxFuture<'static, Result<()>>;
 }
 
 pub(crate) fn erase<H, Args>(h: H) -> Erased
@@ -73,7 +71,7 @@ macro_rules! impl_handler {
             Fut::IntoFuture: Future + Send + 'static,
             <Fut::IntoFuture as Future>::Output: IntoOutcome,
         {
-            fn call(&self, _ctx: EventCtx) -> BoxFuture<'static, Result<(), BoxError>> {
+            fn call(&self, _ctx: EventCtx) -> BoxFuture<'static, Result<()>> {
                 let f = self.clone();
                 Box::pin(async move { f().into_future().await.into_outcome() })
             }
@@ -89,9 +87,9 @@ macro_rules! impl_handler {
             <Fut::IntoFuture as Future>::Output: IntoOutcome,
             $($ty: FromEvent,)+
         {
-            fn call(&self, ctx: EventCtx) -> BoxFuture<'static, Result<(), BoxError>> {
+            fn call(&self, ctx: EventCtx) -> BoxFuture<'static, Result<()>> {
                 let f = self.clone();
-                let args = (|| -> Result<($($ty,)+), BoxError> {
+                let args = (|| -> Result<($($ty,)+)> {
                     Ok(($($ty::from_event(&ctx)?,)+))
                 })();
                 match args {

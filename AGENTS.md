@@ -24,10 +24,12 @@ A developer-friendly QQ Bot framework prototype. Ported from Go
   awaited output `()` or `cryo::Result<()>`. Infallible closures may just
   return `()` — no `Ok(())` needed. A `ReplyBuilder` is `IntoFuture`, so
   one-liners need no `async move`: `|c: Ctx| c.say("hi")`.
-- The handler error type is fixed to `cryo::Error` (not a generic `E`):
-  that single `Result` impl lets `Ok(())` be inferred, so a closure with
-  `?` never needs `Ok::<(), cryo::Error>(())`. Application errors join via
-  `impl From<MyErr> for cryo::Error` (or `cryo::Error::other`).
+- The handler error type is `cryo::Error` — a re-export of `anyhow::Error`.
+  A single `Result` impl lets `Ok(())` be inferred, so a closure with
+  `?` never needs `Ok::<(), cryo::Error>(())`; `?` also converts any
+  `std::error::Error` via anyhow — no `From` impl needed anywhere.
+- Control-flow errors are marker structs, not enum variants:
+  `NoResume` / `FatalClose`, checked via `err.is::<T>()`.
 - Multiple handlers per event = chained calls:
   `bot.on_c2c_message(a).on_c2c_message(b)` (executed in order).
 - Event data injects by type: `PlainText`, `SenderOpenId`, `GroupOpenId`,

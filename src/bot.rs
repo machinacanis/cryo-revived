@@ -157,7 +157,12 @@ impl Bot {
             .unwrap()
             .get(&TypeId::of::<T>())
             .and_then(|a| a.clone().downcast::<T>().ok())
-            .ok_or(Error::NoService(std::any::type_name::<T>()))
+            .ok_or_else(|| {
+                Error::msg(format!(
+                    "no service registered for {}; call bot.provide(...)",
+                    std::any::type_name::<T>()
+                ))
+            })
     }
 
     // --- event registration ---

@@ -113,17 +113,19 @@ impl FromEvent for PlainText {
 
 impl FromEvent for SenderOpenId {
     fn from_event(ctx: &EventCtx) -> Result<Self> {
-        ctx.probe()?.sender_id().map(SenderOpenId).ok_or_else(|| {
-            Error::Extract(format!("event {} has no sender openid", ctx.event_type()))
-        })
+        ctx.probe()?
+            .sender_id()
+            .map(SenderOpenId)
+            .ok_or_else(|| Error::msg(format!("event {} has no sender openid", ctx.event_type())))
     }
 }
 
 impl FromEvent for GroupOpenId {
     fn from_event(ctx: &EventCtx) -> Result<Self> {
-        ctx.probe()?.group_openid.map(GroupOpenId).ok_or_else(|| {
-            Error::Extract(format!("event {} is not group-scoped", ctx.event_type()))
-        })
+        ctx.probe()?
+            .group_openid
+            .map(GroupOpenId)
+            .ok_or_else(|| Error::msg(format!("event {} is not group-scoped", ctx.event_type())))
     }
 }
 
@@ -132,7 +134,7 @@ impl FromEvent for MessageId {
         ctx.probe()?
             .id
             .map(MessageId)
-            .ok_or_else(|| Error::Extract(format!("event {} has no message id", ctx.event_type())))
+            .ok_or_else(|| Error::msg(format!("event {} has no message id", ctx.event_type())))
     }
 }
 
@@ -149,7 +151,7 @@ macro_rules! event_body {
             fn from_event(ctx: &EventCtx) -> Result<Self> {
                 match ctx.event_type() {
                     $($ev)|+ => ctx.decode(),
-                    t => Err(Error::Extract(format!(
+                    t => Err(Error::msg(format!(
                         "event {t} doesn't carry {}",
                         stringify!($ty)
                     ))),
@@ -201,7 +203,7 @@ impl FromEvent for User {
     fn from_event(ctx: &EventCtx) -> Result<Self> {
         match ctx.probe()?.author {
             Some(v) => Ok(serde_json::from_value(v)?),
-            None => Err(Error::Extract(format!(
+            None => Err(Error::msg(format!(
                 "event {} has no author",
                 ctx.event_type()
             ))),
