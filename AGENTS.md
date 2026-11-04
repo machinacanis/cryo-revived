@@ -6,10 +6,10 @@ A developer-friendly QQ Bot framework prototype. Ported from Go
 ## Hard constraints
 
 - **Follow Tencent's official API design.** Naming and semantics track the
-  official docs (`docs/api-spec/`, local mirror `qqbot-docs-tmp/`): event
-  names verbatim (`C2C_MESSAGE_CREATE`…), endpoint verbs (`send_message`,
-  `recall_message`, `get_wss`…), and the official 被动回复(passive)/主动(active)
-  message distinction. No invented abstractions that hide the official model.
+  official docs: event names verbatim (`C2C_MESSAGE_CREATE`…), endpoint
+  verbs (`send_message`, `recall_message`, `get_wss`…), and the official
+  被动回复(passive)/主动(active) message distinction. No invented
+  abstractions that hide the official model.
 - **No matcher-layer helpers** (decided 2026-xx, user instruction): no
   `on_command` / `CommandCtx` / rules / aliases / priority matchers.
   Handlers bind directly to official event types; keep only basic DX.
@@ -59,9 +59,6 @@ wsl -- bash -c "cd /mnt/c/Users/machi/Desktop/cryo-revived && cargo fmt && cargo
 
 Run an example: `QQBOT_APP_ID=.. QQBOT_APP_SECRET=.. cargo run --example minimal`
 
-## Secrets & local-only files
+## Secrets
 
 - `.env` (QQBOT_APP_ID/SECRET) — gitignored, never commit or paste into source.
-- `docs/`, `qqbot-docs-tmp/` — in `.git/info/exclude`, local spec mirrors.
-- `api-test/` — local Python conformance suite + captured openids, uncommitted.
-- Commits are local only; never push unless asked.
