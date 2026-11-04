@@ -6,10 +6,11 @@ A developer-friendly QQ Bot framework prototype. Ported from Go
 ## Hard constraints
 
 - **Follow Tencent's official API design.** Naming and semantics track the
-  official docs: event names verbatim (`C2C_MESSAGE_CREATE`…), endpoint
-  verbs (`send_message`, `recall_message`, `get_wss`…), and the official
-  被动回复(passive)/主动(active) message distinction. No invented
-  abstractions that hide the official model.
+  official docs (distilled in-repo at `docs/api-spec/`, upstream
+  <https://bot.q.qq.com/wiki/develop/api-v2/>): event names verbatim
+  (`C2C_MESSAGE_CREATE`…), endpoint verbs (`send_message`, `recall_message`,
+  `get_wss`…), and the official 被动回复(passive)/主动(active) message
+  distinction. No invented abstractions that hide the official model.
 - **No matcher-layer helpers** (decided 2026-xx, user instruction): no
   `on_command` / `CommandCtx` / rules / aliases / priority matchers.
   Handlers bind directly to official event types; keep only basic DX.
