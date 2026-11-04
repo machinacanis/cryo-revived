@@ -1,7 +1,8 @@
 //! Type-erased handler storage + the [`Handler`] trait (axum-style).
 //!
-//! A handler is any `Fn(args...) -> Future<Output = Result<(), E>>` where
-//! every arg implements [`FromEvent`] and `E: Into<BoxError>`.
+//! A handler is any `Fn(args...) -> Future` where every arg implements
+//! [`FromEvent`] and the future's output implements [`IntoOutcome`]
+//! (`()` or `Result<(), E>`).
 
 use std::future::Future;
 use std::pin::Pin;
@@ -17,9 +18,37 @@ type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub(crate) type Erased =
     Arc<dyn Fn(&EventCtx) -> BoxFuture<'static, Result<(), BoxError>> + Send + Sync>;
 
+/// What a handler future may produce: `()` for infallible handlers,
+/// or `Result<(), E>` for any `E: Into<BoxError>`.
+///
+/// ```text
+/// |c: Ctx| async move { println!("hi"); }           // output = ()
+/// |c: Ctx| async move { c.reply().text("x").send().await }  // output = Result<()>
+/// ```
+pub trait IntoOutcome: Send + 'static {
+    /// Normalize into the erased result type.
+    fn into_outcome(self) -> Result<(), BoxError>;
+}
+
+impl IntoOutcome for () {
+    fn into_outcome(self) -> Result<(), BoxError> {
+        Ok(())
+    }
+}
+
+impl<E> IntoOutcome for std::result::Result<(), E>
+where
+    E: Into<BoxError> + Send + 'static,
+{
+    fn into_outcome(self) -> Result<(), BoxError> {
+        self.map_err(Into::into)
+    }
+}
+
 /// Implemented automatically for closures/fns whose parameters all
 /// implement [`FromEvent`] — you never implement this by hand.
 pub trait Handler<Args>: Clone + Send + Sync + 'static {
+    /// Extract args from `ctx` and run the handler.
     fn call(&self, ctx: EventCtx) -> BoxFuture<'static, Result<(), BoxError>>;
 }
 
@@ -33,25 +62,25 @@ where
 
 macro_rules! impl_handler {
     () => {
-        impl<F, Fut, E> Handler<()> for F
+        impl<F, Fut> Handler<()> for F
         where
             F: Fn() -> Fut + Clone + Send + Sync + 'static,
-            Fut: Future<Output = std::result::Result<(), E>> + Send + 'static,
-            E: Into<BoxError>,
+            Fut: Future + Send + 'static,
+            Fut::Output: IntoOutcome,
         {
             fn call(&self, _ctx: EventCtx) -> BoxFuture<'static, Result<(), BoxError>> {
                 let f = self.clone();
-                Box::pin(async move { f().await.map_err(Into::into) })
+                Box::pin(async move { f().await.into_outcome() })
             }
         }
     };
     ($($arg:ident : $ty:ident),+) => {
         #[allow(non_snake_case)]
-        impl<F, Fut, E, $($ty,)+> Handler<($($ty,)+)> for F
+        impl<F, Fut, $($ty,)+> Handler<($($ty,)+)> for F
         where
             F: Fn($($ty),+) -> Fut + Clone + Send + Sync + 'static,
-            Fut: Future<Output = std::result::Result<(), E>> + Send + 'static,
-            E: Into<BoxError>,
+            Fut: Future + Send + 'static,
+            Fut::Output: IntoOutcome,
             $($ty: FromEvent,)+
         {
             fn call(&self, ctx: EventCtx) -> BoxFuture<'static, Result<(), BoxError>> {
@@ -61,7 +90,7 @@ macro_rules! impl_handler {
                 })();
                 match args {
                     Ok(($($arg,)+)) => {
-                        Box::pin(async move { f($($arg),+).await.map_err(Into::into) })
+                        Box::pin(async move { f($($arg),+).await.into_outcome() })
                     }
                     Err(e) => Box::pin(async move { Err(e) }),
                 }
