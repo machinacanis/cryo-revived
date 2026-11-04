@@ -9,13 +9,12 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let mut fleet = Fleet::new();
 
-    let b1: Bot = fleet.add(Config::from_env(Intent::BASIC));
-    fleet.add(Config {
-        app_id: std::env::var("QQBOT_APP_ID2").expect("QQBOT_APP_ID2"),
-        app_secret: std::env::var("QQBOT_APP_SECRET2").expect("QQBOT_APP_SECRET2"),
-        intents: Intent::BASIC,
-        shard: [0, 1],
-    });
+    let b1: Bot = fleet.add_env(Intent::BASIC);
+    fleet.add(Config::new(
+        std::env::var("QQBOT_APP_ID2").expect("QQBOT_APP_ID2"),
+        std::env::var("QQBOT_APP_SECRET2").expect("QQBOT_APP_SECRET2"),
+        Intent::BASIC,
+    ));
 
     // 注册到所有 bot：c.bot() 自动指向收到消息的账号。
     fleet.on_c2c_message(reply_echo);
@@ -33,12 +32,12 @@ async fn log_which(c: C2CMessageCtx, text: PlainText) -> Result<()> {
 }
 
 async fn reply_echo(c: C2CMessageCtx, text: PlainText) -> Result<()> {
-    c.reply().text(format!("echo: {text}")).send().await
+    c.say(format!("echo: {text}")).await
 }
 
 async fn admin_only(c: C2CMessageCtx, text: PlainText) -> Result<()> {
     if text.as_ref() != "/admin" {
         return Ok(());
     }
-    c.reply().text("only bot1 answers this").send().await
+    c.say("only bot1 answers this").await
 }

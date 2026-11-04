@@ -68,7 +68,7 @@ pub(crate) struct BotInner {
 /// # use cryo::{Bot, Config, model::Intent, C2CMessageCtx};
 /// let bot = Bot::new(Config::new("id", "secret", Intent::BASIC));
 /// bot.on_c2c_message(|c: C2CMessageCtx| async move {
-///     c.reply().text("hi").send().await
+///     c.say("hi").await
 /// });
 /// ```
 #[derive(Clone)]
@@ -100,6 +100,15 @@ impl Bot {
         }
     }
 
+    /// Build a bot from `QQBOT_APP_ID` / `QQBOT_APP_SECRET`.
+    ///
+    /// # Panics
+    /// If the env vars are unset, or `intents` is zero — permissions must be
+    /// declared explicitly.
+    pub fn from_env(intents: Intent) -> Bot {
+        Bot::new(Config::from_env(intents))
+    }
+
     /// The raw REST client: `bot.api().user(openid).send_message(&msg).await`.
     pub fn api(&self) -> &Client {
         &self.inner.api
@@ -120,10 +129,10 @@ impl Bot {
     /// ```no_run
     /// # use cryo::{Bot, Inject, C2CMessageCtx};
     /// # struct Store;
-    /// # let bot = Bot::new(cryo::Config::from_env(cryo::model::Intent::BASIC));
+    /// # let bot = Bot::from_env(cryo::model::Intent::BASIC);
     /// bot.provide(Store);
     /// bot.on_c2c_message(|c: C2CMessageCtx, s: Inject<Store>| async move {
-    ///     c.reply().text("ok").send().await
+    ///     c.say("ok").await
     /// });
     /// ```
     pub fn provide<T: Send + Sync + 'static>(&self, svc: T) -> &Self {
@@ -159,9 +168,9 @@ impl Bot {
     ///
     /// ```no_run
     /// # use cryo::{Bot, EventCtx, model::{event, C2CMessage}};
-    /// # let bot = Bot::new(cryo::Config::from_env(cryo::model::Intent::BASIC));
+    /// # let bot = Bot::from_env(cryo::model::Intent::BASIC);
     /// bot.on(event::C2C_MESSAGE_CREATE, |c: EventCtx, m: C2CMessage| async move {
-    ///     Ok::<(), cryo::Error>(())
+    ///     Ok(())
     /// });
     /// ```
     pub fn on<H, Args>(&self, event_type: &str, handler: H) -> &Self

@@ -11,34 +11,34 @@ use crate::Result;
 
 impl Client {
     /// Endpoint handle of one c2c user.
-    pub fn user(&self, openid: impl Into<String>) -> UserApi {
+    pub fn user(&self, openid: impl AsRef<str>) -> UserApi {
         UserApi {
             c: self.clone(),
-            base: format!("/v2/users/{}", openid.into()),
+            base: format!("/v2/users/{}", openid.as_ref()),
         }
     }
 
     /// Endpoint handle of one QQ group.
-    pub fn group(&self, openid: impl Into<String>) -> GroupApi {
+    pub fn group(&self, openid: impl AsRef<str>) -> GroupApi {
         GroupApi {
             c: self.clone(),
-            base: format!("/v2/groups/{}", openid.into()),
+            base: format!("/v2/groups/{}", openid.as_ref()),
         }
     }
 
     /// Endpoint handle of one guild sub-channel.
-    pub fn channel(&self, id: impl Into<String>) -> ChannelApi {
+    pub fn channel(&self, id: impl AsRef<str>) -> ChannelApi {
         ChannelApi {
             c: self.clone(),
-            id: id.into(),
+            id: id.as_ref().to_string(),
         }
     }
 
     /// Endpoint handle of one guild.
-    pub fn guild(&self, id: impl Into<String>) -> GuildApi {
+    pub fn guild(&self, id: impl AsRef<str>) -> GuildApi {
         GuildApi {
             c: self.clone(),
-            id: id.into(),
+            id: id.as_ref().to_string(),
         }
     }
 

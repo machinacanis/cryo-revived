@@ -5,10 +5,10 @@
 //!
 //! ```no_run
 //! # use cryo::{Bot, C2CMessageCtx, PlainText, SenderOpenId};
-//! # let bot = Bot::new(cryo::Config::from_env(cryo::model::Intent::BASIC));
+//! # let bot = Bot::from_env(cryo::model::Intent::BASIC);
 //! bot.on_c2c_message(|c: C2CMessageCtx, from: SenderOpenId, text: PlainText| async move {
 //!     // from = 发送者 openid, text = 消息纯文本
-//!     c.reply().text(format!("{from}: {text}")).send().await
+//!     c.say(format!("{from}: {text}")).await
 //! });
 //! ```
 //!
@@ -214,11 +214,11 @@ impl FromEvent for User {
 /// ```no_run
 /// # use cryo::{Bot, C2CMessageCtx, Inject};
 /// struct Store;
-/// # let bot = Bot::new(cryo::Config::from_env(cryo::model::Intent::BASIC));
+/// # let bot = Bot::from_env(cryo::model::Intent::BASIC);
 /// bot.provide(Store);
 /// bot.on_c2c_message(|c: C2CMessageCtx, store: Inject<Store>| async move {
 ///     let _store: &Store = &store;
-///     c.reply().text("ok").send().await
+///     c.say("ok").await
 /// });
 /// ```
 pub struct Inject<T: Send + Sync + 'static>(pub Arc<T>);

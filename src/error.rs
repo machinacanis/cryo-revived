@@ -1,7 +1,7 @@
 //! Error types shared across the crate.
 
-/// `Box<dyn Error + Send + Sync>` — the error type of erased handlers, so a
-/// handler may return `Result<(), E>` for any `E: Into<BoxError>`.
+/// `Box<dyn Error + Send + Sync>` — the internal error type of erased
+/// handlers; [`Error::other`] wraps application errors into it.
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// Convenient alias used by all framework APIs.
@@ -31,6 +31,33 @@ pub enum Error {
     /// The gateway session cannot be resumed; re-identify is required.
     #[error("session cannot be resumed")]
     NoResume,
+    /// Any application error wrapped into the framework's error type.
+    #[error("{0}")]
+    Other(BoxError),
+}
+
+impl Error {
+    /// Wrap an application error. Handlers return `cryo::Result<()>`, so
+    /// custom errors only need `impl From<MyErr> for Error` (one line,
+    /// then `?` works everywhere).
+    pub fn other(e: impl Into<BoxError>) -> Self {
+        Error::Other(e.into())
+    }
+}
+
+// Foreign error types users can't impl `From` for themselves — covered here
+// so `?` works on them inside handlers. (Own error types: impl
+// `From<MyErr> for Error` in the app crate.)
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::Other(e.into())
+    }
+}
+
+impl From<BoxError> for Error {
+    fn from(e: BoxError) -> Self {
+        Error::Other(e)
+    }
 }
 
 impl From<tokio_tungstenite::tungstenite::Error> for Error {

@@ -8,7 +8,7 @@ use tracing::error;
 
 use crate::bot::{Bot, Config};
 use crate::handler::{self, Handler};
-use crate::model::event;
+use crate::model::{event, Intent};
 use crate::{Error, Result};
 
 type Shared = Box<dyn Fn(&Bot) + Send + Sync>;
@@ -20,12 +20,12 @@ type Shared = Box<dyn Fn(&Bot) + Send + Sync>;
 /// ```no_run
 /// # use cryo::{Config, Fleet, model::Intent, C2CMessageCtx, PlainText};
 /// # async fn reply_echo(c: C2CMessageCtx, text: PlainText) -> cryo::Result<()> {
-/// #     c.reply().text(format!("echo: {text}")).send().await
+/// #     c.say(format!("echo: {text}")).await
 /// # }
 /// # async fn f() {
 /// let mut fleet = Fleet::new();
-/// let b1 = fleet.add(Config::from_env(Intent::BASIC));
-/// fleet.add(Config::from_env(Intent::BASIC));
+/// let b1 = fleet.add_env(Intent::BASIC);
+/// fleet.add_env(Intent::BASIC);
 ///
 /// fleet.on_c2c_message(reply_echo);      // applies to all bots
 /// b1.on_c2c_message(reply_echo);         // only on b1
@@ -51,6 +51,14 @@ impl Fleet {
     /// or after this call apply to it.
     pub fn add(&mut self, cfg: Config) -> Bot {
         self.join(Bot::new(cfg))
+    }
+
+    /// Create a bot from `QQBOT_APP_ID` / `QQBOT_APP_SECRET` and join the fleet.
+    ///
+    /// # Panics
+    /// If the env vars are unset, or `intents` is zero.
+    pub fn add_env(&mut self, intents: Intent) -> Bot {
+        self.join(Bot::from_env(intents))
     }
 
     /// Adopt an existing bot (shared registrations apply).

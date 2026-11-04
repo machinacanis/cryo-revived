@@ -192,6 +192,22 @@ typed_ctx!(
     "Context of `MESSAGE_AUDIT_PASS` / `MESSAGE_AUDIT_REJECT`."
 );
 
+impl C2CMessageCtx {
+    /// The message's plain text (trimmed) — same as the [`crate::PlainText`]
+    /// extractor, for handlers that only take the ctx.
+    pub fn text(&self) -> &str {
+        self.message.content.trim()
+    }
+}
+
+impl GroupMessageCtx {
+    /// The message's plain text (trimmed) — same as the [`crate::PlainText`]
+    /// extractor, for handlers that only take the ctx.
+    pub fn text(&self) -> &str {
+        self.message.content.trim()
+    }
+}
+
 impl InteractionCtx {
     /// Answer an interaction (code 0-5, see `Client::respond_interaction`).
     pub async fn respond(&self, code: i32) -> Result<()> {

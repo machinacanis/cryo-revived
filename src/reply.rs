@@ -1,6 +1,11 @@
-//! Bound reply builders: `c.reply().text("hi").send().await`.
+//! Bound reply builders: `c.say("hi").await` / `c.reply().text("hi").send().await`.
 
-use crate::context::{C2CMessageCtx, EventCtx, GroupMessageCtx};
+use std::future::{Future, IntoFuture};
+use std::pin::Pin;
+
+use crate::context::{
+    C2CMessageCtx, EventCtx, FriendCtx, GroupBotCtx, GroupMemberCtx, GroupMessageCtx,
+};
 use crate::model::{Keyboard, MessageToCreate, PostMessageResult};
 use crate::Result;
 
@@ -10,16 +15,33 @@ pub(crate) enum Target {
 }
 
 /// Builds and sends a message bound to an event's chat target.
-/// Obtain one from the typed contexts: [`C2CMessageCtx::reply`].
-pub struct ReplyBuilder<'a> {
-    ctx: &'a EventCtx,
+/// Obtain one from the typed contexts: [`C2CMessageCtx::reply`],
+/// [`C2CMessageCtx::say`] & friends.
+///
+/// Sending is just `.await` (or the explicit [`ReplyBuilder::send`]):
+///
+/// ```no_run
+/// # async fn f(c: cryo::C2CMessageCtx) -> cryo::Result<()> {
+/// # let k = cryo::model::Keyboard::builder().build();
+/// c.say("hi").await?;                        // passive reply
+/// c.reply().text("hi").keyboard(k).await?;   // richer messages chain too
+/// # Ok(())
+/// # }
+/// ```
+#[must_use = "a reply is sent when awaited or via .send()"]
+pub struct ReplyBuilder {
+    ctx: EventCtx,
     target: Target,
     msg: MessageToCreate,
 }
 
-impl<'a> ReplyBuilder<'a> {
-    pub(crate) fn new(ctx: &'a EventCtx, target: Target, msg: MessageToCreate) -> Self {
-        ReplyBuilder { ctx, target, msg }
+impl ReplyBuilder {
+    pub(crate) fn new(ctx: &EventCtx, target: Target, msg: MessageToCreate) -> Self {
+        ReplyBuilder {
+            ctx: ctx.clone(),
+            target,
+            msg,
+        }
     }
 
     /// Plain-text content (msg_type 0).
@@ -102,9 +124,19 @@ impl<'a> ReplyBuilder<'a> {
     }
 }
 
+/// `.await` on a builder sends it: `c.say("hi").await`.
+impl IntoFuture for ReplyBuilder {
+    type Output = Result<()>;
+    type IntoFuture = Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(self.send())
+    }
+}
+
 impl C2CMessageCtx {
     /// Passive reply to the user (`msg_id` + auto `msg_seq`).
-    pub fn reply(&self) -> ReplyBuilder<'_> {
+    pub fn reply(&self) -> ReplyBuilder {
         let mut m = MessageToCreate::new();
         m.reply_to(self.message.id.clone())
             .seq(self.bot().next_seq(&self.message.id));
@@ -116,18 +148,28 @@ impl C2CMessageCtx {
     }
 
     /// Active (non-reply) message to this user.
-    pub fn active(&self) -> ReplyBuilder<'_> {
+    pub fn active(&self) -> ReplyBuilder {
         ReplyBuilder::new(
             &self.event,
             Target::User(self.message.author.user_openid.clone()),
             MessageToCreate::new(),
         )
     }
+
+    /// Shortcut: passive text reply — `c.say("hi").await`.
+    pub fn say(&self, s: impl Into<String>) -> ReplyBuilder {
+        self.reply().text(s)
+    }
+
+    /// Shortcut: active text message — `c.push("hi").await`.
+    pub fn push(&self, s: impl Into<String>) -> ReplyBuilder {
+        self.active().text(s)
+    }
 }
 
 impl GroupMessageCtx {
     /// Passive reply into the group (`msg_id` + auto `msg_seq`).
-    pub fn reply(&self) -> ReplyBuilder<'_> {
+    pub fn reply(&self) -> ReplyBuilder {
         let mut m = MessageToCreate::new();
         m.reply_to(self.message.id.clone())
             .seq(self.bot().next_seq(&self.message.id));
@@ -139,11 +181,70 @@ impl GroupMessageCtx {
     }
 
     /// Active (non-reply) message to this group.
-    pub fn active(&self) -> ReplyBuilder<'_> {
+    pub fn active(&self) -> ReplyBuilder {
         ReplyBuilder::new(
             &self.event,
             Target::Group(self.message.group_openid.clone()),
             MessageToCreate::new(),
         )
+    }
+
+    /// Shortcut: passive text reply — `c.say("hi").await`.
+    pub fn say(&self, s: impl Into<String>) -> ReplyBuilder {
+        self.reply().text(s)
+    }
+
+    /// Shortcut: active text message — `c.push("hi").await`.
+    pub fn push(&self, s: impl Into<String>) -> ReplyBuilder {
+        self.active().text(s)
+    }
+}
+
+impl FriendCtx {
+    /// Active message to the user (friend events carry no `msg_id`, so
+    /// there is no passive reply).
+    pub fn active(&self) -> ReplyBuilder {
+        ReplyBuilder::new(
+            &self.event,
+            Target::User(self.event_data.openid.clone()),
+            MessageToCreate::new(),
+        )
+    }
+
+    /// Shortcut: text message to the user — `c.say("hi").await`.
+    pub fn say(&self, s: impl Into<String>) -> ReplyBuilder {
+        self.active().text(s)
+    }
+}
+
+impl GroupBotCtx {
+    /// Active message to the group (these events carry no `msg_id`).
+    pub fn active(&self) -> ReplyBuilder {
+        ReplyBuilder::new(
+            &self.event,
+            Target::Group(self.event_data.group_openid.clone()),
+            MessageToCreate::new(),
+        )
+    }
+
+    /// Shortcut: text message to the group — `c.say("hi").await`.
+    pub fn say(&self, s: impl Into<String>) -> ReplyBuilder {
+        self.active().text(s)
+    }
+}
+
+impl GroupMemberCtx {
+    /// Active message to the group (these events carry no `msg_id`).
+    pub fn active(&self) -> ReplyBuilder {
+        ReplyBuilder::new(
+            &self.event,
+            Target::Group(self.event_data.group_openid.clone()),
+            MessageToCreate::new(),
+        )
+    }
+
+    /// Shortcut: text message to the group — `c.say("hi").await`.
+    pub fn say(&self, s: impl Into<String>) -> ReplyBuilder {
+        self.active().text(s)
     }
 }

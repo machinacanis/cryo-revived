@@ -5,12 +5,12 @@
 //! ```
 
 use cryo::model::Intent;
-use cryo::{Bot, C2CMessageCtx, Config};
+use cryo::{Bot, C2CMessageCtx};
 
 #[tokio::main]
 async fn main() -> cryo::Result<()> {
-    Bot::new(Config::from_env(Intent::BASIC))
-        .on_c2c_message(|c: C2CMessageCtx| async move { c.reply().text("hi").send().await })
+    Bot::from_env(Intent::BASIC)
+        .on_c2c_message(|c: C2CMessageCtx| c.say("hi"))
         .run()
         .await
 }

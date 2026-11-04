@@ -2,14 +2,12 @@
 //! single-bot apps. Registration and definition sit next to each other:
 //!
 //! ```no_run
-//! use cryo::{Config, model::Intent, C2CMessageCtx};
+//! use cryo::{model::Intent, C2CMessageCtx};
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     cryo::init(Config::from_env(Intent::BASIC)); // 必须先声明权限
-//!     cryo::on_c2c_message(|c: C2CMessageCtx| async move {
-//!         c.reply().text("hi").send().await
-//!     });
+//!     cryo::init_env(Intent::BASIC); // 必须先声明权限
+//!     cryo::on_c2c_message(|c: C2CMessageCtx| c.say("hi"));
 //!     cryo::run().await.unwrap();
 //! }
 //! ```
@@ -39,6 +37,15 @@ pub fn init(cfg: Config) -> Bot {
         panic!("cryo: default bot already initialized");
     }
     b
+}
+
+/// [`init`] with credentials from `QQBOT_APP_ID` / `QQBOT_APP_SECRET`:
+/// `cryo::init_env(Intent::BASIC)`.
+///
+/// # Panics
+/// If the env vars are unset, if called twice, or if `intents` is zero.
+pub fn init_env(intents: crate::model::Intent) -> Bot {
+    init(Config::from_env(intents))
 }
 
 fn default() -> &'static Bot {

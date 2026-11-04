@@ -21,7 +21,7 @@ use std::time::SystemTime;
 
 use cryo::model::{GroupMessage, Intent, User};
 use cryo::{
-    Bot, C2CMessageCtx, Config, EventCtx, FriendCtx, FromEvent, GroupMessageCtx, GroupOpenId,
+    Bot, C2CMessageCtx, EventCtx, FriendCtx, FromEvent, GroupMessageCtx, GroupOpenId,
     InteractionCtx, MessageId, PlainText, Result, SenderOpenId,
 };
 
@@ -38,21 +38,19 @@ impl FromEvent for Now {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    let bot = Bot::new(Config::from_env(Intent::BASIC));
+    let bot = Bot::from_env(Intent::BASIC);
 
     // 私聊：注入 sender openid + 纯文本 + 完整 User 对象 + 自定义 Now。
     bot.on_c2c_message(
         |c: C2CMessageCtx, from: SenderOpenId, text: PlainText, u: User, _now: Now| async move {
             if text.as_ref() != "/me" {
-                return c.reply().text("发 /me 查看你的信息").send().await;
+                return c.say("发 /me 查看你的信息").await;
             }
-            c.reply()
-                .text(format!(
-                    "openid: {from}\n昵称: {}\n角色: {}",
-                    u.username, u.member_role
-                ))
-                .send()
-                .await
+            c.say(format!(
+                "openid: {from}\n昵称: {}\n角色: {}",
+                u.username, u.member_role
+            ))
+            .await
         },
     );
 
@@ -64,38 +62,33 @@ async fn main() -> Result<()> {
          text: PlainText,
          msg: GroupMessage| async move {
             if text.as_ref() != "/whoami" {
-                return c.reply().text("发 /whoami 查看成员信息").send().await;
+                return c.say("发 /whoami 查看成员信息").await;
             }
             match c
                 .api()
-                .group(gid.to_string())
+                .group(&gid)
                 .get_member(&msg.author.member_openid)
                 .await
             {
                 Ok(m) => {
-                    c.reply()
-                        .text(format!(
-                            "角色: {}\n昵称: {}\n入群: {}\n(回复 msg_id={}…)",
-                            m.member_role,
-                            m.nick,
-                            m.join_timestamp,
-                            &mid[..12.min(mid.len())]
-                        ))
-                        .send()
-                        .await
+                    c.say(format!(
+                        "角色: {}\n昵称: {}\n入群: {}\n(回复 msg_id={}…)",
+                        m.member_role,
+                        m.nick,
+                        m.join_timestamp,
+                        &mid[..12.min(mid.len())]
+                    ))
+                    .await
                 }
-                Err(e) => c.reply().text(format!("查询失败: {e}")).send().await,
+                Err(e) => c.say(format!("查询失败: {e}")).await,
             }
         },
     );
 
     // 好友添加：只要 openid，就声明 SenderOpenId —— 无需解码事件体。
     bot.on_friend_add(|c: FriendCtx, who: SenderOpenId| async move {
-        c.api()
-            .user(who.to_string())
-            .send_text("你好！发送 /me 查看你的信息")
-            .await?;
-        Ok::<(), cryo::Error>(())
+        tracing::info!(%who, "friend added");
+        c.say("你好！发送 /me 查看你的信息").await
     });
 
     // 互动事件：注入类型化 ctx，ack 后返回。

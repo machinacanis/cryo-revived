@@ -20,18 +20,26 @@ A developer-friendly QQ Bot framework prototype. Ported from Go
 
 ## API surface rules
 
-- Handlers: `Fn(args...) -> Future`, every arg `impl FromEvent`, output
-  `()` or `Result<(), E: Into<BoxError>>`. Infallible closures may just
-  return `()` — no `Ok(())` needed.
+- Handlers: `Fn(args...) -> impl IntoFuture`, every arg `impl FromEvent`,
+  awaited output `()` or `cryo::Result<()>`. Infallible closures may just
+  return `()` — no `Ok(())` needed. A `ReplyBuilder` is `IntoFuture`, so
+  one-liners need no `async move`: `|c: Ctx| c.say("hi")`.
+- The handler error type is fixed to `cryo::Error` (not a generic `E`):
+  that single `Result` impl lets `Ok(())` be inferred, so a closure with
+  `?` never needs `Ok::<(), cryo::Error>(())`. Application errors join via
+  `impl From<MyErr> for cryo::Error` (or `cryo::Error::other`).
 - Multiple handlers per event = chained calls:
   `bot.on_c2c_message(a).on_c2c_message(b)` (executed in order).
 - Event data injects by type: `PlainText`, `SenderOpenId`, `GroupOpenId`,
   `MessageId`, `EventId`, `model::User`, decoded event bodies, typed ctxs
   (`C2CMessageCtx`…), `Inject<T>` for `bot.provide` services, `Option<T>`
   for optional data. Custom data → `impl FromEvent`.
-- Known trade-off: a closure with no error path needs
-  `Ok::<(), cryo::Error>(())` (E0282 otherwise); named `async fn`s
-  returning `cryo::Result<()>` are exempt — prefer named fns.
+- Zero-noise send path: typed ctxs expose `say`/`push` (+`reply`/`active`
+  builders) and `text()`; awaiting a `ReplyBuilder` sends it
+  (`c.say("hi").await`), `.send()` stays available.
+- Credentials: `Bot::from_env(intent)`, `cryo::init_env(intent)`,
+  `Fleet::add_env(intent)`. API handles take `impl AsRef<str>`, so
+  `api.user(&openid)` / `api.group(&gid)` need no `to_string`/`clone`.
 
 ## Layout
 

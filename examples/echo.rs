@@ -5,9 +5,7 @@
 //! ```
 
 use cryo::model::{Button, Intent, Keyboard};
-use cryo::{
-    Bot, C2CMessageCtx, Config, FriendCtx, GroupBotCtx, GroupMessageCtx, Inject, InteractionCtx,
-};
+use cryo::{Bot, C2CMessageCtx, FriendCtx, GroupBotCtx, GroupMessageCtx, Inject, InteractionCtx};
 
 /// 可注入的应用服务。
 struct Greeter {
@@ -24,16 +22,15 @@ impl Greeter {
 async fn main() -> cryo::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let bot = Bot::new(Config::from_env(Intent::WITH_MEMBERS));
+    let bot = Bot::from_env(Intent::WITH_MEMBERS);
 
     // DI：注册服务实例，handler 用 Inject<T> 声明注入。
     bot.provide(Greeter { name: "cryo" });
 
-    // 类型化 handler：c.message 全字段补全 + 链式回复。
+    // 类型化 handler：c.text() 取纯文本，c.say() 直接回。
     bot.on_c2c_message(|c: C2CMessageCtx| async move {
-        let text = c.message.content.trim();
-        match text {
-            "/ping" => c.reply().text("pong").send().await,
+        match c.text() {
+            "/ping" => c.say("pong").await,
             "/md" => {
                 c.reply()
                     .markdown("## cryo\n**markdown** reply works")
@@ -46,34 +43,22 @@ async fn main() -> cryo::Result<()> {
                             )])
                             .build(),
                     )
-                    .send()
                     .await
             }
-            _ => c.reply().text(format!("echo: {text}")).send().await,
+            text => c.say(format!("echo: {text}")).await,
         }
     });
 
     bot.on_group_at_message(|c: GroupMessageCtx| async move {
         let who = &c.message.author.member_openid[..8.min(c.message.author.member_openid.len())];
-        c.reply().text(format!("收到 @{who} 的消息")).send().await
+        c.say(format!("收到 @{who} 的消息")).await
     });
 
-    // 服务注入：声明 Inject<Greeter> 参数即可拿到。
-    bot.on_friend_add(|c: FriendCtx, g: Inject<Greeter>| async move {
-        c.api()
-            .user(c.event_data.openid.clone())
-            .send_text(g.hello())
-            .await?;
-        Ok::<(), cryo::Error>(())
-    });
+    // 服务注入：声明 Inject<Greeter> 参数即可拿到；好友事件无 msg_id，say 即主动消息。
+    // 单条表达式时连 async move 都不用写——ReplyBuilder 实现了 IntoFuture，注册即发送。
+    bot.on_friend_add(|c: FriendCtx, g: Inject<Greeter>| c.say(g.hello()));
 
-    bot.on_group_join(|c: GroupBotCtx| async move {
-        c.api()
-            .group(c.event_data.group_openid.clone())
-            .send_text("感谢拉我进群，发送 /ping 试试")
-            .await?;
-        Ok::<(), cryo::Error>(())
-    });
+    bot.on_group_join(|c: GroupBotCtx| c.say("感谢拉我进群，发送 /ping 试试"));
 
     bot.on_interaction(|c: InteractionCtx| async move { c.respond(0).await });
 

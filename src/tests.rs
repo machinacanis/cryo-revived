@@ -85,7 +85,7 @@ async fn erased_handler_runs_in_order() {
     bot.on_c2c_message(|_c: C2CMessageCtx, text: PlainText| async move {
         assert_eq!(&*text, "hello");
         HITS.fetch_add(1, Ordering::SeqCst);
-        Ok::<(), crate::Error>(())
+        Ok(())
     });
     bot.dispatch_for_test(c2c_payload());
     tokio::task::yield_now().await;
@@ -98,7 +98,7 @@ async fn fleet_replays_shared_handlers() {
     let mut fleet = Fleet::new();
     fleet.on_c2c_message(|_c: C2CMessageCtx| async move {
         HITS.fetch_add(1, Ordering::SeqCst);
-        Ok::<(), crate::Error>(())
+        Ok(())
     });
     let b1 = fleet.add(Config::new("id", "secret", Intent::BASIC));
     let b2 = fleet.add(Config::new("id", "secret", Intent::BASIC));
@@ -122,4 +122,45 @@ fn shared_service_reaches_fleet_bots() {
     let b = fleet.add(Config::new("id", "secret", Intent::BASIC));
     let s = b.service::<Store>().unwrap();
     assert_eq!(s.0.load(Ordering::SeqCst), 7);
+}
+
+#[test]
+fn reply_builder_is_awaitable() {
+    fn assert_awaitable<T: std::future::IntoFuture<Output = crate::Result<()>>>() {}
+    assert_awaitable::<crate::ReplyBuilder>();
+}
+
+/// A closure that only returns `Ok(())` (no annotation) compiles: the
+/// outcome trait pins the error type to `cryo::Error`.
+#[test]
+fn ok_without_annotation() {
+    let bot = Bot::new(Config::new("id", "secret", Intent::BASIC));
+    bot.on_c2c_message(|_c: C2CMessageCtx| async move {
+        let _ = PlainText::from_event(&_c)?;
+        Ok(())
+    });
+}
+
+/// A closure may return a ReplyBuilder directly — `IntoFuture` awaits it.
+#[test]
+fn builder_returning_handler() {
+    let bot = Bot::new(Config::new("id", "secret", Intent::BASIC));
+    bot.on_c2c_message(|c: C2CMessageCtx| c.say("hi"));
+}
+
+/// Application errors join the framework error via `From`, so `?` stays
+/// annotation-free.
+#[tokio::test]
+async fn custom_error_converts_via_from() {
+    struct Boom;
+    impl From<Boom> for crate::Error {
+        fn from(_: Boom) -> Self {
+            crate::Error::other(std::io::Error::other("boom"))
+        }
+    }
+    let bot = Bot::new(Config::new("id", "secret", Intent::BASIC));
+    bot.on_c2c_message(|_c: C2CMessageCtx| async move {
+        Err::<(), Boom>(Boom)?;
+        Ok(())
+    });
 }
